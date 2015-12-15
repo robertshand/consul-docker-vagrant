@@ -1,0 +1,105 @@
+#
+# Configure a cluster of 3 consul servers
+# 
+- hosts: consul_servers
+  user: vagrant
+  sudo: true
+
+  roles:
+    - epel
+
+  tasks:
+
+    - name: setup hosts file so the servers can ref one another by hostname
+      lineinfile: "dest=/etc/hosts state=present regexp='^{{item.ip}}' insertafter='^127.0.0.1' line='{{item.ip}} {{item.hostname}}'"
+      with_items:
+        - {ip: '11.0.0.2', hostname: 'consul-1'}
+        - {ip: '11.0.0.3', hostname: 'consul-2'}
+        - {ip: '11.0.0.4', hostname: 'consul-3'}
+
+    - name: make sure docker-python RPM is not installed
+      yum:
+        name: docker-python
+        state: absent
+
+    - name: make sure pip is installed
+      yum:
+        name: python-pip
+        state: present
+
+    - name: make sure required PyPi packages are installed
+      pip: name={{ item }} state=present
+      with_items:
+        - docker-py==1.2.3
+        - six>=1.4.0
+
+    # Example action to start service httpd, if not running
+    - service: name=docker state=started
+
+- hosts: consul-1
+  user: vagrant
+  sudo: true
+
+  tasks:
+  - name: start docker container
+    docker:
+      name: consul
+      hostname: consul-1
+      image: progrium/consul
+      state: started
+      ports:
+      - "8300:8300"
+      - "8301:8301"
+      - "8300:8301/udp"
+      - "8302:8302"
+      - "8302:8302/udp"
+      - "8400:8400"
+      - "8500:8500"
+      - "53:53/udp"
+      command: -server -advertise 11.0.0.2 -bootstrap-expect 3
+
+
+- hosts: consul-2
+  user: vagrant
+  sudo: true
+
+  tasks:
+  - name: start docker container
+    docker:
+      name: consul
+      hostname: consul-2
+      image: progrium/consul
+      state: started
+      ports:
+      - "8300:8300"
+      - "8301:8301"
+      - "8300:8301/udp"
+      - "8302:8302"
+      - "8302:8302/udp"
+      - "8400:8400"
+      - "8500:8500"
+      - "172.17.42.1:53:53/udp"
+      command: -server -advertise 11.0.0.3 -join 11.0.0.2
+
+- hosts: consul-3
+  user: vagrant
+  sudo: true
+
+  tasks:
+  - name: start docker container
+    docker:
+      name: consul
+      hostname: consul-3
+      image: progrium/consul
+      state: started
+      ports:
+      - "8300:8300"
+      - "8301:8301"
+      - "8300:8301/udp"
+      - "8302:8302"
+      - "8302:8302/udp"
+      - "8400:8400"
+      - "8500:8500"
+      - "172.17.42.1:53:53/udp"
+      command: -server -advertise 11.0.0.4 -join 11.0.0.2
+
